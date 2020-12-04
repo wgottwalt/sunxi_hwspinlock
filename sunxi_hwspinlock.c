@@ -137,7 +137,7 @@ static int sunxi_hwspinlock_probe(struct platform_device *pdev)
 		 * 32, 64, 128 and 256 spinlocks are supported by the hardware implementation,
 		 * though most of the SoCs support 32 spinlocks only
 		 */
-		priv->nlocks = 1 << (5 + i);
+		priv->nlocks = 1 << (4 + num_banks);
 		break;
 	default:
 		dev_err(&pdev->dev, "unsupported hwspinlock setup (%d)\n", num_banks);
