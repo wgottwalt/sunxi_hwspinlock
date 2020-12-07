@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * sunxi_hwspinlock_test.c - hardware spinlock enhanced test module for sunxi_hwspinlock driver
+ * sun8i_hwspinlock_test.c - hardware spinlock enhanced test module for sun8i_hwspinlock driver
  * Copyright (C) 2020 Wilken Gottwalt <wilken.gottwalt@posteo.net>
  */
 
@@ -17,7 +17,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
-#define DRIVER_NAME		"sunxi_hwspinlock_test2"
+#define DRIVER_NAME		"sun8i_hwspinlock_test2"
 
 #define SPINLOCK_BASE_ID	0
 #define BITSTR_LEN		36
@@ -59,7 +59,7 @@ static int mode;
 module_param(mode, int, 0444);
 MODULE_PARM_DESC(mode, "debugfs only, status printk, normal test, crust test (default: 0 (0..3))");
 
-struct sunxi_hwspinlock_test2_data {
+struct sun8i_hwspinlock_test2_data {
 	struct dentry *debugfs;
 	void __iomem *io_base;
 	int slock;
@@ -71,7 +71,7 @@ struct sunxi_hwspinlock_test2_data {
 	int statmode;
 };
 
-static void bit_string(struct sunxi_hwspinlock_test2_data *priv, char *str)
+static void bit_string(struct sun8i_hwspinlock_test2_data *priv, char *str)
 {
 	u32 inuse = readl(priv->io_base);
 
@@ -91,7 +91,7 @@ static void bit_string(struct sunxi_hwspinlock_test2_data *priv, char *str)
 
 static int hwlocks_inuse_show(struct seq_file *seqf, void *unused)
 {
-	struct sunxi_hwspinlock_test2_data *priv = seqf->private;
+	struct sun8i_hwspinlock_test2_data *priv = seqf->private;
 	char bitstr[BITSTR_LEN];
 
 	bit_string(priv, bitstr);
@@ -101,7 +101,7 @@ static int hwlocks_inuse_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(hwlocks_inuse);
 
-static void sunxi_hwspinlock_test2_debugfs_init(struct sunxi_hwspinlock_test2_data *priv)
+static void sun8i_hwspinlock_test2_debugfs_init(struct sun8i_hwspinlock_test2_data *priv)
 {
 	priv->debugfs = debugfs_create_dir(DRIVER_NAME, NULL);
 	debugfs_create_file("inuse", 0444, priv->debugfs, priv, &hwlocks_inuse_fops);
@@ -109,13 +109,13 @@ static void sunxi_hwspinlock_test2_debugfs_init(struct sunxi_hwspinlock_test2_da
 
 #else
 
-static void sunxi_hwspinlock_debugfs_init(struct sunxi_hwspinlock_test2_data *priv)
+static void sun8i_hwspinlock_debugfs_init(struct sun8i_hwspinlock_test2_data *priv)
 {
 }
 
 #endif
 
-static int sunxi_hwspinlock_test2_print_status(struct sunxi_hwspinlock_test2_data *priv)
+static int sun8i_hwspinlock_test2_print_status(struct sun8i_hwspinlock_test2_data *priv)
 {
 	char bitstr[BITSTR_LEN];
 
@@ -131,7 +131,7 @@ static int sunxi_hwspinlock_test2_print_status(struct sunxi_hwspinlock_test2_dat
 
 static char __bitstr[BITSTR_LEN];
 
-static int sunxi_hwspinlock_test2_lock(struct sunxi_hwspinlock_test2_data *priv,
+static int sun8i_hwspinlock_test2_lock(struct sun8i_hwspinlock_test2_data *priv,
 				       struct hwspinlock *hwlock)
 {
 	int i, err;
@@ -182,7 +182,7 @@ static int sunxi_hwspinlock_test2_lock(struct sunxi_hwspinlock_test2_data *priv,
 	return 0;
 }
 
-static int sunxi_hwspinlock_test2_run(struct sunxi_hwspinlock_test2_data *priv)
+static int sun8i_hwspinlock_test2_run(struct sun8i_hwspinlock_test2_data *priv)
 {
 	struct hwspinlock *hwlock;
 	int i, res, err;
@@ -197,7 +197,7 @@ static int sunxi_hwspinlock_test2_run(struct sunxi_hwspinlock_test2_data *priv)
 				continue;
 			}
 
-			res = sunxi_hwspinlock_test2_lock(priv, hwlock);
+			res = sun8i_hwspinlock_test2_lock(priv, hwlock);
 			if (res) {
 				pr_info("[run ]--- testing specific lock %d failed (%d) ---\n", i,
 					res);
@@ -216,9 +216,9 @@ static int sunxi_hwspinlock_test2_run(struct sunxi_hwspinlock_test2_data *priv)
 	return err;
 }
 
-static int sunxi_hwspinlock_test2_probe(struct platform_device *pdev)
+static int sun8i_hwspinlock_test2_probe(struct platform_device *pdev)
 {
-	struct sunxi_hwspinlock_test2_data *priv;
+	struct sun8i_hwspinlock_test2_data *priv;
 	int err;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -273,7 +273,7 @@ static int sunxi_hwspinlock_test2_probe(struct platform_device *pdev)
 	else
 		priv->statmode = 0;
 
-	sunxi_hwspinlock_test2_debugfs_init(priv);
+	sun8i_hwspinlock_test2_debugfs_init(priv);
 	platform_set_drvdata(pdev, priv);
 
 	switch (mode) {
@@ -281,10 +281,10 @@ static int sunxi_hwspinlock_test2_probe(struct platform_device *pdev)
 		return 0;
 
 	case 1:
-		return sunxi_hwspinlock_test2_print_status(priv);
+		return sun8i_hwspinlock_test2_print_status(priv);
 
 	case 2 ... 3:
-		return sunxi_hwspinlock_test2_run(priv);
+		return sun8i_hwspinlock_test2_run(priv);
 
 	default:
 		dev_err(&pdev->dev, "unknown mode (%d)\n", mode);
@@ -294,46 +294,46 @@ static int sunxi_hwspinlock_test2_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int sunxi_hwspinlock_test2_remove(struct platform_device *pdev)
+static int sun8i_hwspinlock_test2_remove(struct platform_device *pdev)
 {
-	struct sunxi_hwspinlock_test2_data *priv = platform_get_drvdata(pdev);
+	struct sun8i_hwspinlock_test2_data *priv = platform_get_drvdata(pdev);
 
 	debugfs_remove_recursive(priv->debugfs);
 
 	return 0;
 }
 
-static const struct of_device_id sunxi_hwspinlock_test2_ids[] = {
+static const struct of_device_id sun8i_hwspinlock_test2_ids[] = {
 	{ .compatible = "allwinner,sun8i-hwspinlock-stat", },
 	{ .compatible = "allwinner,sun50i-hwspinlock-stat", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, sunxi_hwspinlock_test2_ids);
+MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_test2_ids);
 
-static struct platform_driver sunxi_hwspinlock_test2_driver = {
-	.probe	= sunxi_hwspinlock_test2_probe,
-	.remove	= sunxi_hwspinlock_test2_remove,
+static struct platform_driver sun8i_hwspinlock_test2_driver = {
+	.probe	= sun8i_hwspinlock_test2_probe,
+	.remove	= sun8i_hwspinlock_test2_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= sunxi_hwspinlock_test2_ids,
+		.of_match_table	= sun8i_hwspinlock_test2_ids,
 	},
 };
 
-static int __init sunxi_hwspinlock_test2_init(void)
+static int __init sun8i_hwspinlock_test2_init(void)
 {
 	pr_info("[init]--- SUNXI HWSPINLOCK DRIVER ENHANCED TEST ---\n");
 
-	return platform_driver_register(&sunxi_hwspinlock_test2_driver);
+	return platform_driver_register(&sun8i_hwspinlock_test2_driver);
 }
-module_init(sunxi_hwspinlock_test2_init);
+module_init(sun8i_hwspinlock_test2_init);
 
-static void __exit sunxi_hwspinlock_test2_exit(void)
+static void __exit sun8i_hwspinlock_test2_exit(void)
 {
 	pr_info("[exit]--- SUNXI HWSPINLOCK DRIVER ENHANCED TEST ---\n");
-	platform_driver_unregister(&sunxi_hwspinlock_test2_driver);
+	platform_driver_unregister(&sun8i_hwspinlock_test2_driver);
 }
-module_exit(sunxi_hwspinlock_test2_exit);
+module_exit(sun8i_hwspinlock_test2_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("SUNXI hardware spinlock enhanced test driver");
+MODULE_DESCRIPTION("SUN8I hardware spinlock enhanced test driver");
 MODULE_AUTHOR("Wilken Gottwalt <wilken.gottwalt@posteo.net>");
