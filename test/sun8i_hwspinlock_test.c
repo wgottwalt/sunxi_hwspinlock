@@ -102,7 +102,6 @@ static int sun8i_hwspinlock_test_run(void)
 
 static const struct of_device_id sun8i_hwspinlock_test_ids[] = {
 	{ .compatible = "allwinner,sun8i-hwspinlock", },
-	{ .compatible = "allwinner,sun50i-hwspinlock", },
 	{},
 };
 
@@ -110,7 +109,7 @@ static int __init sun8i_hwspinlock_test_init(void)
 {
 	struct device_node *np;
 
-	pr_info("[init]--- SUNXI HWSPINLOCK DRIVER TEST ---\n");
+	pr_info("[init]--- SUN8I HWSPINLOCK DRIVER TEST ---\n");
 
 	np = of_find_matching_node_and_match(NULL, sun8i_hwspinlock_test_ids, NULL);
 	if (!np || !of_device_is_available(np)) {
@@ -132,7 +131,7 @@ module_init(sun8i_hwspinlock_test_init);
 
 static void __exit sun8i_hwspinlock_test_exit(void)
 {
-	pr_info("[exit]--- SUNXI HWSPINLOCK DRIVER TEST ---\n");
+	pr_info("[exit]--- SUN8I HWSPINLOCK DRIVER TEST ---\n");
 }
 module_exit(sun8i_hwspinlock_test_exit);
 

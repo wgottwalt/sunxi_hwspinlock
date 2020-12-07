@@ -305,7 +305,6 @@ static int sun8i_hwspinlock_test2_remove(struct platform_device *pdev)
 
 static const struct of_device_id sun8i_hwspinlock_test2_ids[] = {
 	{ .compatible = "allwinner,sun8i-hwspinlock-stat", },
-	{ .compatible = "allwinner,sun50i-hwspinlock-stat", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_test2_ids);
@@ -321,7 +320,7 @@ static struct platform_driver sun8i_hwspinlock_test2_driver = {
 
 static int __init sun8i_hwspinlock_test2_init(void)
 {
-	pr_info("[init]--- SUNXI HWSPINLOCK DRIVER ENHANCED TEST ---\n");
+	pr_info("[init]--- SUN8I HWSPINLOCK DRIVER ENHANCED TEST ---\n");
 
 	return platform_driver_register(&sun8i_hwspinlock_test2_driver);
 }
@@ -329,7 +328,7 @@ module_init(sun8i_hwspinlock_test2_init);
 
 static void __exit sun8i_hwspinlock_test2_exit(void)
 {
-	pr_info("[exit]--- SUNXI HWSPINLOCK DRIVER ENHANCED TEST ---\n");
+	pr_info("[exit]--- SUN8I HWSPINLOCK DRIVER ENHANCED TEST ---\n");
 	platform_driver_unregister(&sun8i_hwspinlock_test2_driver);
 }
 module_exit(sun8i_hwspinlock_test2_exit);
