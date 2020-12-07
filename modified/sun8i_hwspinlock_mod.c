@@ -22,12 +22,13 @@
 #define DRIVER_NAME		"sun8i_hwspinlock_mod"
 
 #define SPINLOCK_BASE_ID	0 /* there is only one hwspinlock device per SoC */
+#define SPINLOCK_SYSSTATUS_REG	0x0000
 #define SPINLOCK_NOTTAKEN	0
 
 struct sun8i_hwspinlock_mod_data {
 	struct hwspinlock_device *bank;
 	struct reset_control *reset;
-	struct clk *ahb_clock;
+	struct clk *ahb_clk;
 	struct dentry *debugfs;
 	int nlocks;
 };
@@ -77,13 +78,23 @@ static const struct hwspinlock_ops sun8i_hwspinlock_mod_ops = {
 	.unlock		= sun8i_hwspinlock_mod_unlock,
 };
 
+static void sun8i_hwspinlock_disable(void *data)
+{
+	struct sun8i_hwspinlock_mod_data *priv = data;
+
+	debugfs_remove_recursive(priv->debugfs);
+	reset_control_assert(priv->reset);
+	clk_disable_unprepare(priv->ahb_clk);
+}
+
 static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 {
 	struct sun8i_hwspinlock_mod_data *priv;
 	struct hwspinlock *hwlock;
 	void __iomem *io_base;
 	void __iomem *io_locks;
-	int num_banks, err, i;
+	u32 num_banks;
+	int err, i;
 
 	io_base = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID);
 	if (IS_ERR(io_base)) {
@@ -103,9 +114,15 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
-	priv->ahb_clock = devm_clk_get(&pdev->dev, "ahb");
-	if (IS_ERR(priv->ahb_clock)) {
-		err = PTR_ERR(priv->ahb_clock);
+	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
+	if (err) {
+		dev_err(&pdev->dev, "unable to add disable action\n");
+		return err;
+	}
+
+	priv->ahb_clk = devm_clk_get(&pdev->dev, "ahb");
+	if (IS_ERR(priv->ahb_clk)) {
+		err = PTR_ERR(priv->ahb_clk);
 		dev_err(&pdev->dev, "unable to get AHB clock (%d)\n", err);
 		return err;
 	}
@@ -122,28 +139,25 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = clk_prepare_enable(priv->ahb_clock);
+	err = clk_prepare_enable(priv->ahb_clk);
 	if (err) {
 		dev_err(&pdev->dev, "unable to prepare AHB clock (%d)\n", err);
-		goto reset_fail;
+		return err;
 	}
 
 	/*
 	 * bit 28 and 29 hold the amount of spinlock banks, but at the same time the datasheet
 	 * says, bit 30 and 31 are reserved while the values can be 0 to 4, which is not reachable
 	 * by two bits alone, so the reserved bits are also taken into account
-	 *
-	 * order is important here, getting the amount of locks is only possible after setting up
-	 * clocks and resets
 	 */
-	num_banks = readl(io_base) >> 28;
+	num_banks = readl(io_base + SPINLOCK_SYSSTATUS_REG) >> 28;
 	switch (num_banks) {
 	case 1 ... 4:
 		/*
 		 * 32, 64, 128 and 256 spinlocks are supported by the hardware implementation,
 		 * though most of the SoCs support 32 spinlocks only
 		 */
-		priv->nlocks = 1 << (5 + i);
+		priv->nlocks = 1 << (4 + num_banks);
 		break;
 	default:
 		dev_err(&pdev->dev, "unsupported hwspinlock setup (%d)\n", num_banks);
@@ -152,59 +166,19 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 
 	priv->bank = devm_kzalloc(&pdev->dev, struct_size(priv->bank, lock, priv->nlocks),
 				  GFP_KERNEL);
-	if (!priv->bank) {
+	if (!priv->bank)
 		err = -ENOMEM;
-		goto reset_fail;
-	}
 
 	for (i = 0; i < priv->nlocks; ++i) {
 		hwlock = &priv->bank->lock[i];
 		hwlock->priv = io_locks + sizeof(u32) * i;
 	}
 
-	err = hwspin_lock_register(priv->bank, &pdev->dev, &sun8i_hwspinlock_mod_ops,
-				   SPINLOCK_BASE_ID, priv->nlocks);
-	if (err) {
-		dev_err(&pdev->dev, "unable to register hwspinlocks (%d)\n", err);
-		goto fail;
-	}
-
 	sun8i_hwspinlock_mod_debugfs_init(priv);
 	platform_set_drvdata(pdev, priv);
 
-	dev_dbg(&pdev->dev, "SUNXI hardware spinlock driver enabled (%d locks)\n", priv->nlocks);
-
-	return 0;
-
-fail:
-	clk_disable_unprepare(priv->ahb_clock);
-
-reset_fail:
-	if (priv->reset)
-		reset_control_assert(priv->reset);
-
-	return err;
-}
-
-static int sun8i_hwspinlock_mod_remove(struct platform_device *pdev)
-{
-	struct sun8i_hwspinlock_mod_data *priv = platform_get_drvdata(pdev);
-	int err;
-
-	debugfs_remove_recursive(priv->debugfs);
-
-	err = hwspin_lock_unregister(priv->bank);
-	if (err) {
-		dev_err(&pdev->dev, "unregister device failed (%d)\n", err);
-		return err;
-	}
-
-	if (priv->reset)
-		reset_control_assert(priv->reset);
-
-	clk_disable_unprepare(priv->ahb_clock);
-
-	return 0;
+	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun8i_hwspinlock_mod_ops,
+					 SPINLOCK_BASE_ID, priv->nlocks);
 }
 
 static const struct of_device_id sun8i_hwspinlock_mod_ids[] = {
@@ -215,7 +189,6 @@ MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_mod_ids);
 
 static struct platform_driver sun8i_hwspinlock_mod_driver = {
 	.probe	= sun8i_hwspinlock_mod_probe,
-	.remove	= sun8i_hwspinlock_mod_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
 		.of_match_table	= sun8i_hwspinlock_mod_ids,
@@ -226,7 +199,7 @@ static int __init sun8i_hwspinlock_mod_init(void)
 {
 	return platform_driver_register(&sun8i_hwspinlock_mod_driver);
 }
-postcore_initcall(sun8i_hwspinlock_mod_init);
+module_init(sun8i_hwspinlock_mod_init);
 
 static void __exit sun8i_hwspinlock_mod_exit(void)
 {

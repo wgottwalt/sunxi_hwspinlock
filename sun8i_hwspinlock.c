@@ -29,7 +29,7 @@
 struct sun8i_hwspinlock_data {
 	struct hwspinlock_device *bank;
 	struct reset_control *reset;
-	struct clk *ahb_clock;
+	struct clk *ahb_clk;
 	struct dentry *debugfs;
 	int nlocks;
 };
@@ -79,6 +79,15 @@ static const struct hwspinlock_ops sun8i_hwspinlock_ops = {
 	.unlock		= sun8i_hwspinlock_unlock,
 };
 
+static void sun8i_hwspinlock_disable(void *data)
+{
+	struct sun8i_hwspinlock_data *priv = data;
+
+	debugfs_remove_recursive(priv->debugfs);
+	reset_control_assert(priv->reset);
+	clk_disable_unprepare(priv->ahb_clk);
+}
+
 static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 {
 	struct sun8i_hwspinlock_data *priv;
@@ -98,9 +107,15 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
-	priv->ahb_clock = devm_clk_get(&pdev->dev, "ahb");
-	if (IS_ERR(priv->ahb_clock)) {
-		err = PTR_ERR(priv->ahb_clock);
+	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
+	if (err) {
+		dev_err(&pdev->dev, "unable to add disable action\n");
+		return err;
+	}
+
+	priv->ahb_clk = devm_clk_get(&pdev->dev, "ahb");
+	if (IS_ERR(priv->ahb_clk)) {
+		err = PTR_ERR(priv->ahb_clk);
 		dev_err(&pdev->dev, "unable to get AHB clock (%d)\n", err);
 		return err;
 	}
@@ -117,19 +132,16 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = clk_prepare_enable(priv->ahb_clock);
+	err = clk_prepare_enable(priv->ahb_clk);
 	if (err) {
-		dev_err(&pdev->dev, "unable to prepare AHB clock (%d)\n", err);
-		goto reset_fail;
+		dev_err(&pdev->dev, "unable to prepare AHB clk (%d)\n", err);
+		return err;
 	}
 
 	/*
 	 * bit 28 and 29 hold the amount of spinlock banks, but at the same time the datasheet
 	 * says, bit 30 and 31 are reserved while the values can be 0 to 4, which is not reachable
 	 * by two bits alone, so the reserved bits are also taken into account
-	 *
-	 * order is important here, getting the amount of locks is only possible after setting up
-	 * clocks and resets
 	 */
 	num_banks = readl(io_base + SPINLOCK_SYSSTATUS_REG) >> 28;
 	switch (num_banks) {
@@ -147,59 +159,19 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 
 	priv->bank = devm_kzalloc(&pdev->dev, struct_size(priv->bank, lock, priv->nlocks),
 				  GFP_KERNEL);
-	if (!priv->bank) {
-		err = -ENOMEM;
-		goto reset_fail;
-	}
+	if (!priv->bank)
+		return -ENOMEM;
 
 	for (i = 0; i < priv->nlocks; ++i) {
 		hwlock = &priv->bank->lock[i];
 		hwlock->priv = io_base + SPINLOCK_LOCK_REGN + sizeof(u32) * i;
 	}
 
-	err = hwspin_lock_register(priv->bank, &pdev->dev, &sun8i_hwspinlock_ops, SPINLOCK_BASE_ID,
-				   priv->nlocks);
-	if (err) {
-		dev_err(&pdev->dev, "unable to register hwspinlocks (%d)\n", err);
-		goto fail;
-	}
-
 	sun8i_hwspinlock_debugfs_init(priv);
 	platform_set_drvdata(pdev, priv);
 
-	dev_dbg(&pdev->dev, "SUNXI hardware spinlock driver enabled (%d locks)\n", priv->nlocks);
-
-	return 0;
-
-fail:
-	clk_disable_unprepare(priv->ahb_clock);
-
-reset_fail:
-	if (priv->reset)
-		reset_control_assert(priv->reset);
-
-	return err;
-}
-
-static int sun8i_hwspinlock_remove(struct platform_device *pdev)
-{
-	struct sun8i_hwspinlock_data *priv = platform_get_drvdata(pdev);
-	int err;
-
-	debugfs_remove_recursive(priv->debugfs);
-
-	err = hwspin_lock_unregister(priv->bank);
-	if (err) {
-		dev_err(&pdev->dev, "unregister device failed (%d)\n", err);
-		return err;
-	}
-
-	if (priv->reset)
-		reset_control_assert(priv->reset);
-
-	clk_disable_unprepare(priv->ahb_clock);
-
-	return 0;
+	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun8i_hwspinlock_ops,
+					 SPINLOCK_BASE_ID, priv->nlocks);
 }
 
 static const struct of_device_id sun8i_hwspinlock_ids[] = {
@@ -210,7 +182,6 @@ MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_ids);
 
 static struct platform_driver sun8i_hwspinlock_driver = {
 	.probe	= sun8i_hwspinlock_probe,
-	.remove	= sun8i_hwspinlock_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
 		.of_match_table	= sun8i_hwspinlock_ids,
