@@ -226,11 +226,8 @@ static int sun8i_hwspinlock_test2_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->io_base = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID);
-	if (IS_ERR(priv->io_base)) {
-		err = PTR_ERR(priv->io_base);
-		dev_err(&pdev->dev, "unable to request MMIO (%d)\n", err);
-		return err;
-	}
+	if (IS_ERR(priv->io_base))
+		return PTR_ERR(priv->io_base);
 
 	if (start_lock < 0 || start_lock > (MAX_LOCKS - 1))
 		priv->slock = START_LOCK;
@@ -304,7 +301,7 @@ static int sun8i_hwspinlock_test2_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id sun8i_hwspinlock_test2_ids[] = {
-	{ .compatible = "allwinner,sun8i-hwspinlock-stat", },
+	{ .compatible = "allwinner,sun8i-a33-hwspinlock-stat", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_test2_ids);

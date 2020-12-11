@@ -97,21 +97,12 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 	int err, i;
 
 	io_base = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID);
-	if (IS_ERR(io_base)) {
-		err = PTR_ERR(io_base);
-		dev_err(&pdev->dev, "unable to request MMIO (%d)\n", err);
-		return err;
-	}
+	if (IS_ERR(io_base))
+		return PTR_ERR(io_base);
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
-
-	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
-	if (err) {
-		dev_err(&pdev->dev, "unable to add disable action\n");
-		return err;
-	}
 
 	priv->ahb_clk = devm_clk_get(&pdev->dev, "ahb");
 	if (IS_ERR(priv->ahb_clk)) {
@@ -120,11 +111,10 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	priv->reset = devm_reset_control_get_optional(&pdev->dev, "ahb");
-	if (IS_ERR(priv->reset)) {
+	priv->reset = devm_reset_control_get(&pdev->dev, "ahb");
+	if (IS_ERR(priv->reset))
 		return dev_err_probe(&pdev->dev, PTR_ERR(priv->reset),
 				     "unable to get reset control\n");
-	}
 
 	err = reset_control_deassert(priv->reset);
 	if (err) {
@@ -138,18 +128,32 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 		return err;
 	}
 
+	sun8i_hwspinlock_debugfs_init(priv);
+
+	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
+	if (err) {
+		dev_err(&pdev->dev, "unable to add disable action\n");
+		return err;
+	}
+
 	/*
-	 * bit 28 and 29 hold the amount of spinlock banks, but at the same time the datasheet
-	 * says, bit 30 and 31 are reserved while the values can be 0 to 4, which is not reachable
-	 * by two bits alone, so the reserved bits are also taken into account
+	 * bit 28 and 29 represents the hwspinlock setup
+	 *
+	 * every datasheet (A64, A80, A83T, H3, H5, H6 ...) says the default value is 0x1 and 0x1
+	 * to 0x4 represent 32, 64, 128 and 256 locks
+	 * but later datasheets (H5, H6) say 00, 01, 10, 11 represent 32, 64, 128 and 256 locks,
+	 * but that would mean H5 and H6 have 64 locks, while their datasheets talk about 32 locks
+	 * all the time, not a single mentioning of 64 locks
+	 * the 0x4 value is also not representable by 2 bits alone, so some datasheets are not
+	 * correct
+	 * one thing have all in common, default value of the sysstatus register is 0x10000000,
+	 * which results in bit 28 being set
+	 * this is the reason 0x1 is considered being 32 locks and bit 30 is taken into account
+	 * verified on H2+ (datasheet 0x1 = 32 locks) and H5 (datasheet 01 = 64 locks)
 	 */
 	num_banks = readl(io_base + SPINLOCK_SYSSTATUS_REG) >> 28;
 	switch (num_banks) {
 	case 1 ... 4:
-		/*
-		 * 32, 64, 128 and 256 spinlocks are supported by the hardware implementation,
-		 * though most of the SoCs support 32 spinlocks only
-		 */
 		priv->nlocks = 1 << (4 + num_banks);
 		break;
 	default:
@@ -167,7 +171,6 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 		hwlock->priv = io_base + SPINLOCK_LOCK_REGN + sizeof(u32) * i;
 	}
 
-	sun8i_hwspinlock_debugfs_init(priv);
 	platform_set_drvdata(pdev, priv);
 
 	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun8i_hwspinlock_ops,
@@ -175,7 +178,7 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sun8i_hwspinlock_ids[] = {
-	{ .compatible = "allwinner,sun8i-hwspinlock", },
+	{ .compatible = "allwinner,sun8i-a33-hwspinlock", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_ids);
@@ -187,18 +190,7 @@ static struct platform_driver sun8i_hwspinlock_driver = {
 		.of_match_table	= sun8i_hwspinlock_ids,
 	},
 };
-
-static int __init sun8i_hwspinlock_init(void)
-{
-	return platform_driver_register(&sun8i_hwspinlock_driver);
-}
-module_init(sun8i_hwspinlock_init);
-
-static void __exit sun8i_hwspinlock_exit(void)
-{
-	platform_driver_unregister(&sun8i_hwspinlock_driver);
-}
-module_exit(sun8i_hwspinlock_exit);
+module_platform_driver(sun8i_hwspinlock_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SUN8I hardware spinlock driver");

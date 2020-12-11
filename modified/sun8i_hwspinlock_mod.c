@@ -97,28 +97,16 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 	int err, i;
 
 	io_base = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID);
-	if (IS_ERR(io_base)) {
-		err = PTR_ERR(io_base);
-		dev_err(&pdev->dev, "unable to request first MMIO (%d)\n", err);
-		return err;
-	}
+	if (IS_ERR(io_base))
+		return PTR_ERR(io_base);
 
 	io_locks = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID + 1);
-	if (IS_ERR(io_locks)) {
-		err = PTR_ERR(io_locks);
-		dev_err(&pdev->dev, "unable to request second MMIO (%d)\n", err);
-		return err;
-	}
+	if (IS_ERR(io_locks))
+		return PTR_ERR(io_locks);
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
-
-	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
-	if (err) {
-		dev_err(&pdev->dev, "unable to add disable action\n");
-		return err;
-	}
 
 	priv->ahb_clk = devm_clk_get(&pdev->dev, "ahb");
 	if (IS_ERR(priv->ahb_clk)) {
@@ -142,6 +130,14 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 	err = clk_prepare_enable(priv->ahb_clk);
 	if (err) {
 		dev_err(&pdev->dev, "unable to prepare AHB clock (%d)\n", err);
+		return err;
+	}
+
+	sun8i_hwspinlock_mod_debugfs_init(priv);
+
+	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
+	if (err) {
+		dev_err(&pdev->dev, "unable to add disable action\n");
 		return err;
 	}
 
@@ -174,7 +170,6 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 		hwlock->priv = io_locks + sizeof(u32) * i;
 	}
 
-	sun8i_hwspinlock_mod_debugfs_init(priv);
 	platform_set_drvdata(pdev, priv);
 
 	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun8i_hwspinlock_mod_ops,
@@ -182,7 +177,7 @@ static int sun8i_hwspinlock_mod_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sun8i_hwspinlock_mod_ids[] = {
-	{ .compatible = "allwinner,sun8i-hwspinlock-mod", },
+	{ .compatible = "allwinner,sun8i-a33-hwspinlock-mod", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_mod_ids);
@@ -194,18 +189,7 @@ static struct platform_driver sun8i_hwspinlock_mod_driver = {
 		.of_match_table	= sun8i_hwspinlock_mod_ids,
 	},
 };
-
-static int __init sun8i_hwspinlock_mod_init(void)
-{
-	return platform_driver_register(&sun8i_hwspinlock_mod_driver);
-}
-module_init(sun8i_hwspinlock_mod_init);
-
-static void __exit sun8i_hwspinlock_mod_exit(void)
-{
-	platform_driver_unregister(&sun8i_hwspinlock_mod_driver);
-}
-module_exit(sun8i_hwspinlock_mod_exit);
+module_platform_driver(sun8i_hwspinlock_mod_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SUN8I hardware spinlock enhanced driver");

@@ -53,7 +53,7 @@ obj-$(CONFIG_HWSPINLOCK_SUN8I) += sun8i_hwspinlock.o
 ##### device tree (H3, H5, H6 dtsi, H6 -> 0x03004000):
 ```
 hwspinlock: hwspinlock@1c18000 {
-	compatible = "allwinner,suni8i-hwspinlock";
+	compatible = "allwinner,suni8-a33-hwspinlock";
 	reg = <0x01c18000 0x1000>;
 	clocks = <&ccu CLK_BUS_SPINLOCK>;
 	clock-names = "ahb";
@@ -86,7 +86,7 @@ obj-$(CONFIG_HWSPINLOCK_SUN8I_MOD) += sun8i_hwspinlock_mod.o
 ##### device tree (H3, H5, H6 dtsi, H6 -> 0x03004000):
 ```
 hwspinlock-mod@1c18000 {
-	compatible = "allwinner,sun8i-hwspinlock-mod";
+	compatible = "allwinner,sun8i-a33-hwspinlock-mod";
 	reg = <0x01c18000 0x4 0x01c18100 0x400>;
 	clocks = <&ccu CLK_BUS_SPINLOCK>;
 	clock-names = "ahb";
@@ -119,7 +119,7 @@ entry.
 ##### device tree (H3, H5, H6 dtsi, H6 -> 0x03004010):
 ```
 hwspinlock-stat@1c18010 {
-	compatible = "allwinner,sun8i-hwspinlock-stat";
+	compatible = "allwinner,sun8i-a33-hwspinlock-stat";
 	reg = <0x01c18010 0x4>;
 	status = "okay";
 };

@@ -101,7 +101,7 @@ static int sun8i_hwspinlock_test_run(void)
 }
 
 static const struct of_device_id sun8i_hwspinlock_test_ids[] = {
-	{ .compatible = "allwinner,sun8i-hwspinlock", },
+	{ .compatible = "allwinner,sun8i-a33-hwspinlock", },
 	{},
 };
 
