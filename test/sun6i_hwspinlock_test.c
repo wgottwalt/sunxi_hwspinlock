@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * sun8i_hwspinlock_test.c - hardware spinlock test module for sun8i_hwspinlock driver
+ * sun6i_hwspinlock_test.c - hardware spinlock test module for sun6i_hwspinlock driver
  * Copyright (C) 2020 Wilken Gottwalt <wilken.gottwalt@posteo.net>
  */
 
@@ -15,7 +15,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 
-#define DRIVER_NAME		"sun8i_hwspinlock_test"
+#define DRIVER_NAME		"sun6i_hwspinlock_test"
 
 #define START_LOCK		0
 #define LOCKS			32
@@ -36,7 +36,7 @@ static int holdtime;
 module_param(holdtime, int, 0444);
 MODULE_PARM_DESC(holdtime, "time period to hold a lock in us (default: 0 (0..1000000))");
 
-static int sun8i_hwspinlock_test_lock(struct hwspinlock *hwlock)
+static int sun6i_hwspinlock_test_lock(struct hwspinlock *hwlock)
 {
 	int i, err;
 
@@ -70,7 +70,7 @@ static int sun8i_hwspinlock_test_lock(struct hwspinlock *hwlock)
 	return 0;
 }
 
-static int sun8i_hwspinlock_test_run(void)
+static int sun6i_hwspinlock_test_run(void)
 {
 	struct hwspinlock *hwlock;
 	int i, res, err;
@@ -84,7 +84,7 @@ static int sun8i_hwspinlock_test_run(void)
 			continue;
 		}
 
-		res = sun8i_hwspinlock_test_lock(hwlock);
+		res = sun6i_hwspinlock_test_lock(hwlock);
 		if (res) {
 			pr_info("[run ]--- testing specific lock %d failed (%d) ---\n", i, res);
 			err = res;
@@ -100,18 +100,18 @@ static int sun8i_hwspinlock_test_run(void)
 	return err;
 }
 
-static const struct of_device_id sun8i_hwspinlock_test_ids[] = {
-	{ .compatible = "allwinner,sun8i-a33-hwspinlock", },
+static const struct of_device_id sun6i_hwspinlock_test_ids[] = {
+	{ .compatible = "allwinner,sun6i-a31-hwspinlock", },
 	{},
 };
 
-static int __init sun8i_hwspinlock_test_init(void)
+static int __init sun6i_hwspinlock_test_init(void)
 {
 	struct device_node *np;
 
-	pr_info("[init]--- SUN8I HWSPINLOCK DRIVER TEST ---\n");
+	pr_info("[init]--- SUN6I HWSPINLOCK DRIVER TEST ---\n");
 
-	np = of_find_matching_node_and_match(NULL, sun8i_hwspinlock_test_ids, NULL);
+	np = of_find_matching_node_and_match(NULL, sun6i_hwspinlock_test_ids, NULL);
 	if (!np || !of_device_is_available(np)) {
 		pr_info("[init] no known hwspinlock node found\n");
 		return -ENODEV;
@@ -125,16 +125,16 @@ static int __init sun8i_hwspinlock_test_init(void)
 	else
 		max_locks = max_locks - start_lock;
 
-	return sun8i_hwspinlock_test_run();
+	return sun6i_hwspinlock_test_run();
 }
-module_init(sun8i_hwspinlock_test_init);
+module_init(sun6i_hwspinlock_test_init);
 
-static void __exit sun8i_hwspinlock_test_exit(void)
+static void __exit sun6i_hwspinlock_test_exit(void)
 {
-	pr_info("[exit]--- SUN8I HWSPINLOCK DRIVER TEST ---\n");
+	pr_info("[exit]--- SUN6I HWSPINLOCK DRIVER TEST ---\n");
 }
-module_exit(sun8i_hwspinlock_test_exit);
+module_exit(sun6i_hwspinlock_test_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("SUN8I hardware spinlock test driver");
+MODULE_DESCRIPTION("SUN6I hardware spinlock test driver");
 MODULE_AUTHOR("Wilken Gottwalt <wilken.gottwalt@posteo.net>");

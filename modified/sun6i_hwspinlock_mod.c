@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * sun8i_hwspinlock.c - hardware spinlock driver for sun8i compatible Allwinner SoCs
+ * sun6i_hwspinlock_mod.c - hardware spinlock driver for sun6i compatible Allwinner SoCs
  * Copyright (C) 2020 Wilken Gottwalt <wilken.gottwalt@posteo.net>
  */
 
@@ -19,14 +19,13 @@
 
 #include "hwspinlock_internal.h"
 
-#define DRIVER_NAME		"sun8i_hwspinlock"
+#define DRIVER_NAME		"sun6i_hwspinlock_mod"
 
 #define SPINLOCK_BASE_ID	0 /* there is only one hwspinlock device per SoC */
 #define SPINLOCK_SYSSTATUS_REG	0x0000
-#define SPINLOCK_LOCK_REGN	0x0100
 #define SPINLOCK_NOTTAKEN	0
 
-struct sun8i_hwspinlock_data {
+struct sun6i_hwspinlock_mod_data {
 	struct hwspinlock_device *bank;
 	struct reset_control *reset;
 	struct clk *ahb_clk;
@@ -38,7 +37,7 @@ struct sun8i_hwspinlock_data {
 
 static int hwlocks_supported_show(struct seq_file *seqf, void *unused)
 {
-	struct sun8i_hwspinlock_data *priv = seqf->private;
+	struct sun6i_hwspinlock_mod_data *priv = seqf->private;
 
 	seq_printf(seqf, "%d\n", priv->nlocks);
 
@@ -46,7 +45,7 @@ static int hwlocks_supported_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(hwlocks_supported);
 
-static void sun8i_hwspinlock_debugfs_init(struct sun8i_hwspinlock_data *priv)
+static void sun6i_hwspinlock_mod_debugfs_init(struct sun6i_hwspinlock_mod_data *priv)
 {
 	priv->debugfs = debugfs_create_dir(DRIVER_NAME, NULL);
 	debugfs_create_file("supported", 0444, priv->debugfs, priv, &hwlocks_supported_fops);
@@ -54,51 +53,47 @@ static void sun8i_hwspinlock_debugfs_init(struct sun8i_hwspinlock_data *priv)
 
 #else
 
-static void sun8i_hwspinlock_debugfs_init(struct sun8i_hwspinlock_data *priv)
+static void sun6i_hwspinlock_mod_debugfs_init(struct sun6i_hwspinlock_mod_data *priv)
 {
 }
 
 #endif
 
-static int sun8i_hwspinlock_trylock(struct hwspinlock *lock)
+static int sun6i_hwspinlock_mod_trylock(struct hwspinlock *lock)
 {
 	void __iomem *lock_addr = lock->priv;
 
 	return (readl(lock_addr) == SPINLOCK_NOTTAKEN);
 }
 
-static void sun8i_hwspinlock_unlock(struct hwspinlock *lock)
+static void sun6i_hwspinlock_mod_unlock(struct hwspinlock *lock)
 {
 	void __iomem *lock_addr = lock->priv;
 
 	writel(SPINLOCK_NOTTAKEN, lock_addr);
 }
 
-static const struct hwspinlock_ops sun8i_hwspinlock_ops = {
-	.trylock	= sun8i_hwspinlock_trylock,
-	.unlock		= sun8i_hwspinlock_unlock,
+static const struct hwspinlock_ops sun6i_hwspinlock_mod_ops = {
+	.trylock	= sun6i_hwspinlock_mod_trylock,
+	.unlock		= sun6i_hwspinlock_mod_unlock,
 };
 
-static void sun8i_hwspinlock_disable(void *data)
+static int sun6i_hwspinlock_mod_probe(struct platform_device *pdev)
 {
-	struct sun8i_hwspinlock_data *priv = data;
-
-	debugfs_remove_recursive(priv->debugfs);
-	reset_control_assert(priv->reset);
-	clk_disable_unprepare(priv->ahb_clk);
-}
-
-static int sun8i_hwspinlock_probe(struct platform_device *pdev)
-{
-	struct sun8i_hwspinlock_data *priv;
+	struct sun6i_hwspinlock_mod_data *priv;
 	struct hwspinlock *hwlock;
 	void __iomem *io_base;
+	void __iomem *io_locks;
 	u32 num_banks;
 	int err, i;
 
 	io_base = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID);
 	if (IS_ERR(io_base))
 		return PTR_ERR(io_base);
+
+	io_locks = devm_platform_ioremap_resource(pdev, SPINLOCK_BASE_ID + 1);
+	if (IS_ERR(io_locks))
+		return PTR_ERR(io_locks);
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -125,15 +120,7 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 	err = clk_prepare_enable(priv->ahb_clk);
 	if (err) {
 		dev_err(&pdev->dev, "unable to prepare AHB clk (%d)\n", err);
-		return err;
-	}
-
-	sun8i_hwspinlock_debugfs_init(priv);
-
-	err = devm_add_action_or_reset(&pdev->dev, sun8i_hwspinlock_disable, priv);
-	if (err) {
-		dev_err(&pdev->dev, "unable to add disable action\n");
-		return err;
+		goto clk_fail;
 	}
 
 	/*
@@ -157,41 +144,75 @@ static int sun8i_hwspinlock_probe(struct platform_device *pdev)
 		priv->nlocks = 1 << (4 + num_banks);
 		break;
 	default:
+		err = -EINVAL;
 		dev_err(&pdev->dev, "unsupported hwspinlock setup (%d)\n", num_banks);
-		return -EINVAL;
+		goto bank_fail;
 	}
 
 	priv->bank = devm_kzalloc(&pdev->dev, struct_size(priv->bank, lock, priv->nlocks),
 				  GFP_KERNEL);
-	if (!priv->bank)
-		return -ENOMEM;
+	if (!priv->bank) {
+		err = -ENOMEM;
+		goto bank_fail;
+	}
 
 	for (i = 0; i < priv->nlocks; ++i) {
 		hwlock = &priv->bank->lock[i];
-		hwlock->priv = io_base + SPINLOCK_LOCK_REGN + sizeof(u32) * i;
+		hwlock->priv = io_locks + sizeof(u32) * i;
 	}
+
+	/* failure of debugfs is considered non-fatal */
+	sun6i_hwspinlock_mod_debugfs_init(priv);
+	if (IS_ERR(priv->debugfs))
+		priv->debugfs = NULL;
 
 	platform_set_drvdata(pdev, priv);
 
-	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun8i_hwspinlock_ops,
+	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun6i_hwspinlock_mod_ops,
 					 SPINLOCK_BASE_ID, priv->nlocks);
+bank_fail:
+	clk_disable_unprepare(priv->ahb_clk);
+clk_fail:
+	reset_control_assert(priv->reset);
+
+	return err;
 }
 
-static const struct of_device_id sun8i_hwspinlock_ids[] = {
-	{ .compatible = "allwinner,sun8i-a33-hwspinlock", },
+static int sun6i_hwspinlock_mod_remove(struct platform_device *pdev)
+{
+	struct sun6i_hwspinlock_mod_data *priv = platform_get_drvdata(pdev);
+	int err;
+
+	debugfs_remove_recursive(priv->debugfs);
+
+	err = hwspin_lock_unregister(priv->bank);
+	if (err) {
+		dev_err(&pdev->dev, "unregister device failed (%d)\n", err);
+		return err;
+	}
+
+	clk_disable_unprepare(priv->ahb_clk);
+	reset_control_assert(priv->reset);
+
+	return 0;
+}
+
+static const struct of_device_id sun6i_hwspinlock_mod_ids[] = {
+	{ .compatible = "allwinner,sun6i-a31-hwspinlock-mod", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, sun8i_hwspinlock_ids);
+MODULE_DEVICE_TABLE(of, sun6i_hwspinlock_mod_ids);
 
-static struct platform_driver sun8i_hwspinlock_driver = {
-	.probe	= sun8i_hwspinlock_probe,
+static struct platform_driver sun6i_hwspinlock_mod_driver = {
+	.probe	= sun6i_hwspinlock_mod_probe,
+	.remove	= sun6i_hwspinlock_mod_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= sun8i_hwspinlock_ids,
+		.of_match_table	= sun6i_hwspinlock_mod_ids,
 	},
 };
-module_platform_driver(sun8i_hwspinlock_driver);
+module_platform_driver(sun6i_hwspinlock_mod_driver);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("SUN8I hardware spinlock driver");
+MODULE_DESCRIPTION("SUN6I hardware spinlock enhanced driver");
 MODULE_AUTHOR("Wilken Gottwalt <wilken.gottwalt@posteo.net>");

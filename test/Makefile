@@ -1,6 +1,6 @@
 EXTRA_CFLAGS = -DEXPORT_SYMTAB
 
-obj-m := sun8i_hwspinlock_test.o
+obj-m := sun6i_hwspinlock_test.o
 
 KDIR ?= /lib/modules/$(shell uname -r)/build/
 PWD = $(shell pwd)
