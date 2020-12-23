@@ -53,7 +53,7 @@ obj-$(CONFIG_HWSPINLOCK_SUN6I) += sun6i_hwspinlock.o
 ##### device tree (H3, H5, H6 dtsi, H6 is 0x03004000):
 ```
 hwspinlock: hwspinlock@1c18000 {
-	compatible = "allwinner,suni6-a31-hwspinlock";
+	compatible = "allwinner,sun6i-a31-hwspinlock";
 	reg = <0x01c18000 0x1000>;
 	clocks = <&ccu CLK_BUS_SPINLOCK>;
 	resets = <&ccu RST_BUS_SPINLOCK>;
