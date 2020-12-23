@@ -56,7 +56,9 @@ hwspinlock: hwspinlock@1c18000 {
 	compatible = "allwinner,sun6i-a31-hwspinlock";
 	reg = <0x01c18000 0x1000>;
 	clocks = <&ccu CLK_BUS_SPINLOCK>;
+	clock-names = "ahb";
 	resets = <&ccu RST_BUS_SPINLOCK>;
+	reset-names = "ahb";
 	status = "okay";
 };
 ```
@@ -87,7 +89,9 @@ hwspinlock-mod@1c18000 {
 	compatible = "allwinner,sun6i-a31-hwspinlock-mod";
 	reg = <0x01c18000 0x4 0x01c18100 0x400>;
 	clocks = <&ccu CLK_BUS_SPINLOCK>;
+	clock-names = "ahb";
 	resets = <&ccu RST_BUS_SPINLOCK>;
+	reset-names = "ahb";
 	status = "okay";
 };
 ```
