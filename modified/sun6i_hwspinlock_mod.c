@@ -168,8 +168,12 @@ static int sun6i_hwspinlock_mod_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, priv);
 
-	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun6i_hwspinlock_mod_ops,
-					 SPINLOCK_BASE_ID, priv->nlocks);
+	err = hwspin_lock_register(priv->bank, &pdev->dev, &sun6i_hwspinlock_mod_ops,
+				   SPINLOCK_BASE_ID, priv->nlocks);
+
+	if (err == 0)
+		return 0;
+
 bank_fail:
 	clk_disable_unprepare(priv->ahb_clk);
 clk_fail:
