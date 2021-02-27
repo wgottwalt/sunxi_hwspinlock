@@ -219,7 +219,6 @@ static int sun6i_hwspinlock_test2_run(struct sun6i_hwspinlock_test2_data *priv)
 static int sun6i_hwspinlock_test2_probe(struct platform_device *pdev)
 {
 	struct sun6i_hwspinlock_test2_data *priv;
-	int err;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
