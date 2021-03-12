@@ -79,6 +79,15 @@ static const struct hwspinlock_ops sun6i_hwspinlock_ops = {
 	.unlock		= sun6i_hwspinlock_unlock,
 };
 
+static void sun6i_hwspinlock_disable(void *data)
+{
+	struct sun6i_hwspinlock_data *priv = data;
+
+	debugfs_remove_recursive(priv->debugfs);
+	clk_disable_unprepare(priv->ahb_clk);
+	reset_control_assert(priv->reset);
+}
+
 static int sun6i_hwspinlock_probe(struct platform_device *pdev)
 {
 	struct sun6i_hwspinlock_data *priv;
@@ -162,12 +171,16 @@ static int sun6i_hwspinlock_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->debugfs))
 		priv->debugfs = NULL;
 
+	err = devm_add_action_or_reset(&pdev->dev, sun6i_hwspinlock_disable, priv);
+	if (err) {
+		dev_err(&pdev->dev, "failed to add hwspinlock disable action\n");
+		goto bank_fail;
+	}
+
 	platform_set_drvdata(pdev, priv);
 
-	err = hwspin_lock_register(priv->bank, &pdev->dev, &sun6i_hwspinlock_ops, SPINLOCK_BASE_ID,
-				   priv->nlocks);
-	if (err == 0)
-		return 0;
+	return devm_hwspin_lock_register(&pdev->dev, priv->bank, &sun6i_hwspinlock_ops,
+					 SPINLOCK_BASE_ID, priv->nlocks);
 
 bank_fail:
 	clk_disable_unprepare(priv->ahb_clk);
@@ -175,25 +188,6 @@ clk_fail:
 	reset_control_assert(priv->reset);
 
 	return err;
-}
-
-static int sun6i_hwspinlock_remove(struct platform_device *pdev)
-{
-	struct sun6i_hwspinlock_data *priv = platform_get_drvdata(pdev);
-	int err;
-
-	debugfs_remove_recursive(priv->debugfs);
-
-	err = hwspin_lock_unregister(priv->bank);
-	if (err) {
-		dev_err(&pdev->dev, "unregister device failed (%d)\n", err);
-		return err;
-	}
-
-	clk_disable_unprepare(priv->ahb_clk);
-	reset_control_assert(priv->reset);
-
-	return 0;
 }
 
 static const struct of_device_id sun6i_hwspinlock_ids[] = {
@@ -204,7 +198,6 @@ MODULE_DEVICE_TABLE(of, sun6i_hwspinlock_ids);
 
 static struct platform_driver sun6i_hwspinlock_driver = {
 	.probe	= sun6i_hwspinlock_probe,
-	.remove	= sun6i_hwspinlock_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
 		.of_match_table	= sun6i_hwspinlock_ids,
